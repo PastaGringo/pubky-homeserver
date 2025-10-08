@@ -1,0 +1,136 @@
+version: '3.8'
+
+networks:
+  pubky-network:
+    driver: bridge
+    name: ${PUBKY_NETWORK:-pubky-network}
+
+volumes:
+  caddy_data:
+    name: ${CADDY_DATA_VOLUME:-pubky_caddy_data}
+  homeserver_data:
+    name: ${HOMESERVER_DATA_VOLUME:-pubky_homeserver_data}
+  nexus_data:
+    name: ${NEXUS_DATA_VOLUME:-pubky_nexus_data}
+
+services:
+  nexusd:
+    container_name: ${COMPOSE_PROJECT_NAME:-pubky-stack}_nexusd
+    build:
+      context: ../pubky-nexus
+      dockerfile: Dockerfile
+    command: nexusd --config-dir=/config
+    volumes:
+      - ../pubky-nexus/storage/static:/static
+      - ./configs/nexus/config.toml:/config/config.toml:ro
+      - nexus_data:/data
+    networks:
+      - pubky-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  pubky-app:
+    container_name: ${COMPOSE_PROJECT_NAME:-pubky-stack}_pubky-app
+    build:
+      context: ../pubky-app
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_HOMESERVER: ${NEXT_PUBLIC_HOMESERVER}
+        NEXT_PUBLIC_NEXUS: ${NEXT_PUBLIC_NEXUS}
+        NEXT_PUBLIC_TESTNET: ${NEXT_PUBLIC_TESTNET:-false}
+        NEXT_PUBLIC_DEFAULT_HTTP_RELAY: ${NEXT_PUBLIC_DEFAULT_HTTP_RELAY}
+        NEXT_PUBLIC_PKARR_RELAYS: ${NEXT_PUBLIC_PKARR_RELAYS}
+        NEXT_ENABLE_PLAUSIBLE: ${NEXT_ENABLE_PLAUSIBLE:-false}
+        PUBKY_APP_BRANCH: ${PUBKY_APP_BRANCH:-dev}
+        PUBKY_APP_REF: ${PUBKY_APP_REF:-}
+        PUBKY_APP_DATE: ${PUBKY_APP_DATE:-}
+    command: ["npm", "run", "serve:prod"]
+    environment:
+      - NEXT_PUBLIC_HOMESERVER=${NEXT_PUBLIC_HOMESERVER}
+      - NEXT_PUBLIC_NEXUS=${NEXT_PUBLIC_NEXUS}
+      - NEXT_PUBLIC_TESTNET=${NEXT_PUBLIC_TESTNET:-false}
+      - NEXT_PUBLIC_DEFAULT_HTTP_RELAY=${NEXT_PUBLIC_DEFAULT_HTTP_RELAY}
+      - NEXT_PUBLIC_PKARR_RELAYS=${NEXT_PUBLIC_PKARR_RELAYS}
+      - NEXT_ENABLE_PLAUSIBLE=${NEXT_ENABLE_PLAUSIBLE:-false}
+    networks:
+      - pubky-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4200"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  caddy:
+    container_name: ${COMPOSE_PROJECT_NAME:-pubky-stack}_caddy
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "2019:2019"  # Caddy admin API
+    volumes:
+      - ./configs/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - ./data/caddy:/config
+      - ./logs:/var/log/caddy
+    networks:
+      - pubky-network
+    environment:
+      - CADDY_ADMIN=0.0.0.0:2019
+      - CADDY_EMAIL=${CADDY_EMAIL:-admin@yourdomain.com}
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:2019/config/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  httprelay:
+    container_name: ${COMPOSE_PROJECT_NAME:-pubky-stack}_httprelay
+    image: jonasjasas/httprelay
+    restart: unless-stopped
+    command: ["-p", "15412"]
+    networks:
+      - pubky-network
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "15412"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  homeserver:
+    container_name: ${COMPOSE_PROJECT_NAME:-pubky-stack}_homeserver
+    restart: unless-stopped
+    build:
+      context: ../homeserver
+      dockerfile: Dockerfile
+    ports:
+      - "6287:6287"
+    volumes:
+      - ./configs/homeserver/homeserver.config.toml:/root/.pubky/config.toml:ro
+      - ./configs/homeserver/homeserver.entrypoint.sh:/entrypoint.sh:ro
+      - homeserver_data:/root/.pubky/data
+      - ./logs:/var/log/homeserver
+    networks:
+      - pubky-network
+    environment:
+      - NEXT_PUBLIC_HOMESERVER=${NEXT_PUBLIC_HOMESERVER}
+      - NEXT_PUBLIC_NEXUS=${NEXT_PUBLIC_NEXUS}
+      - NEXT_PUBLIC_DEFAULT_HTTP_RELAY=${NEXT_PUBLIC_DEFAULT_HTTP_RELAY}
+      - NEXT_PUBLIC_PKARR_RELAYS=${NEXT_PUBLIC_PKARR_RELAYS}
+      - NEXT_ENABLE_PLAUSIBLE=${NEXT_ENABLE_PLAUSIBLE:-false}
+    entrypoint: ["/bin/sh", "-c", "/entrypoint.sh"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6287/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s

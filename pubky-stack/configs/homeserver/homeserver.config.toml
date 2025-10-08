@@ -1,0 +1,37 @@
+# Pubky Homeserver Configuration
+# This file configures the Pubky homeserver instance
+
+[server]
+# Server binding configuration
+host = "0.0.0.0"
+port = 6287
+
+# Enable health check endpoint
+health_check = true
+
+[network]
+# Network configuration
+max_connections = 1000
+timeout = 30
+
+[storage]
+# Storage configuration
+data_dir = "/root/.pubky/data"
+max_file_size = "10MB"
+
+[logging]
+# Logging configuration
+level = "info"
+format = "json"
+output = "/var/log/homeserver/homeserver.log"
+
+[security]
+# Security settings
+enable_cors = true
+allowed_origins = ["*"]
+max_request_size = "10MB"
+
+[features]
+# Feature flags
+enable_metrics = true
+enable_tracing = false

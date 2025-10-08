@@ -1,0 +1,67 @@
+services:
+
+  nexusd:
+    container_name: nexusd
+    build:
+      context: ./pubky-nexus
+    command: nexusd --config-dir=/config
+    volumes:
+      - ./pubky-nexus/storage/static:/static
+      - ./pubky-nexus/config.toml:/config/config.toml
+    restart: unless-stopped
+
+  pubky-app:
+    container_name: pubky-app
+    build:
+      context: ./pubky-app
+      args:
+        NEXT_PUBLIC_HOMESERVER: e9qbrpxu7bdfiq863bny1xdfs4patdem8fp1grq5qe5tafep7a7o
+        NEXT_PUBLIC_NEXUS: 'https://nexus.pubky.fractalized.net'
+        NEXT_PUBLIC_TESTNET: "false"
+        NEXT_PUBLIC_DEFAULT_HTTP_RELAY: https://httprelay.pubky.fractalized.net/link
+        NEXT_PUBLIC_PKARR_RELAYS: "[\"https://pkarr.pubky.app\",\"https://pkarr.pubky.org\"]"
+        NEXT_ENABLE_PLAUSIBLE: "false"
+        PUBKY_APP_BRANCH: "dev"
+        PUBKY_APP_REF: ""
+        PUBKY_APP_DATE: ""
+    command: [ "npm", "run", "serve:prod" ]
+    restart: unless-stopped
+
+  caddy:
+    container_name: caddy
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+
+  httprelay:
+    container_name: httprelay
+    image: jonasjasas/httprelay
+    restart: always
+    command: ["-p", "15412"]
+
+  homeserver:
+    container_name: homeserver
+    restart: always
+    build:
+      context: ./homeserver
+    ports:
+      - "6287:6287"
+    volumes:
+      - ./homeserver/config/homeserver.config.toml:/root/.pubky/config.toml
+      - ./homeserver/config/homeserver.entrypoint.sh:/entrypoint.sh
+      - ./homeserver/data:/root/.pubky
+    environment:
+      NEXT_PUBLIC_HOMESERVER: "e9qbrpxu7bdfiq863bny1xdfs4patdem8fp1grq5qe5tafep7a7o"
+      NEXT_PUBLIC_NEXUS: 'https://nexus.pubky.fractalized.net'
+      NEXT_PUBLIC_DEFAULT_HTTP_RELAY: "https://httprelay.pubky.fractalized.net/link"
+      NEXT_PUBLIC_PKARR_RELAYS: '["https://pkarr.pubky.app","https://pkarr.pubky.org"]'
+      NEXT_ENABLE_PLAUSIBLE: "false"
+    entrypoint: ["/bin/sh", "-c", "/entrypoint.sh"]
+
+volumes:
+  caddy_data:

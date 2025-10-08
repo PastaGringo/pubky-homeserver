@@ -1,0 +1,54 @@
+# Pubky Nexus Configuration
+# This file configures the Pubky nexus instance
+
+[server]
+# Server binding configuration
+host = "0.0.0.0"
+port = 8080
+
+# Enable health check endpoint
+health_check = true
+
+[database]
+# Database configuration
+type = "sqlite"
+path = "/data/nexus.db"
+max_connections = 100
+
+[network]
+# Network configuration
+max_connections = 1000
+timeout = 30
+keep_alive = true
+
+[storage]
+# Storage configuration
+static_dir = "/static"
+max_file_size = "50MB"
+allowed_types = ["image/*", "text/*", "application/json"]
+
+[logging]
+# Logging configuration
+level = "info"
+format = "json"
+output = "stdout"
+
+[security]
+# Security settings
+enable_cors = true
+allowed_origins = ["*"]
+allowed_methods = ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+allowed_headers = ["Accept", "Content-Type", "Content-Length", "Accept-Encoding", "X-CSRF-Token", "Authorization"]
+max_request_size = "50MB"
+
+[cache]
+# Cache configuration
+enable = true
+ttl = 3600
+max_size = "1GB"
+
+[features]
+# Feature flags
+enable_metrics = true
+enable_tracing = false
+enable_websockets = true

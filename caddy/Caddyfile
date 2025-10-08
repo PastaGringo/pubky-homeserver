@@ -1,0 +1,66 @@
+franky.pubky.fractalized.net {
+    reverse_proxy franky:3000
+}
+
+tagky.pubky.fractalized.net {
+    reverse_proxy tagky:3001
+}
+
+roadky.pubky.fractalized.net {
+    reverse_proxy roadky:3000
+}
+
+code.fractalized.net {
+    reverse_proxy http://code-server:8443
+}
+
+picky.pubky.fractalized.net {
+    reverse_proxy http://picky:3000
+}
+
+explorer.pubky.fractalized.net {
+    reverse_proxy http://pubky-explorer:5173
+}
+
+nexus.pubky.fractalized.net {
+    reverse_proxy http://nexusd:8080
+}
+
+pkarr.pubky.fractalized.net {
+    reverse_proxy http://pkarr:6881
+}
+
+app.pubky.fractalized.net {
+    reverse_proxy http://pubky-app:4200
+}
+
+httprelay.pubky.fractalized.net {
+    # Gestion des requêtes OPTIONS (preflight)
+    @options method OPTIONS
+    handle @options {
+        header Access-Control-Allow-Methods "GET, OPTIONS, PUT, POST, DELETE, PATCH"
+        header Access-Control-Allow-Headers "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, User-Agent"
+        header Access-Control-Allow-Credentials "true"
+        header Access-Control-Max-Age "86400"
+        header Access-Control-Allow-Origin "{http.request.header.Origin}"
+        respond 204
+    }
+    
+    # Toutes les autres requêtes
+    handle {
+        header >Access-Control-Allow-Credentials "true"
+        header >Access-Control-Allow-Origin "{http.request.header.Origin}"
+        
+        reverse_proxy http://httprelay:15412 {
+            header_up Host {host}
+        }
+    }
+}
+
+homeserver.pubky.fractalized.net {
+    reverse_proxy http://homeserver:6286
+}
+
+admin-homeserver.pubky.fractalized.net {
+    reverse_proxy http://homeserver:6288
+}

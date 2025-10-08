@@ -1,0 +1,166 @@
+# Pubky Stack Caddy Configuration
+# This file configures reverse proxy for all Pubky services
+
+# Global options
+{
+    # Enable admin API
+    admin 0.0.0.0:2019
+    
+    # Logging
+    log {
+        output file /var/log/caddy/access.log
+        format json
+    }
+    
+    # Error logging
+    log error {
+        output file /var/log/caddy/error.log
+        format json
+    }
+}
+
+# Main application - Pubky App
+localhost, :80 {
+    # Enable logging for this site
+    log {
+        output file /var/log/caddy/pubky-app.log
+        format json
+    }
+    
+    # Health check endpoint
+    handle /health {
+        respond "OK" 200
+    }
+    
+    # Reverse proxy to pubky-app
+    reverse_proxy pubky-app:4200 {
+        # Health check
+        health_uri /
+        health_interval 30s
+        health_timeout 10s
+        
+        # Headers
+        header_up Host {host}
+        header_up X-Real-IP {remote}
+        header_up X-Forwarded-For {remote}
+        header_up X-Forwarded-Proto {scheme}
+    }
+}
+
+# Nexus API
+localhost:8080, nexus.localhost {
+    log {
+        output file /var/log/caddy/nexus.log
+        format json
+    }
+    
+    # CORS headers for API
+    header {
+        Access-Control-Allow-Origin "*"
+        Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+        Access-Control-Allow-Headers "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization"
+        Access-Control-Max-Age "86400"
+    }
+    
+    # Handle preflight requests
+    @options method OPTIONS
+    handle @options {
+        respond 204
+    }
+    
+    # Reverse proxy to nexusd
+    reverse_proxy nexusd:8080 {
+        health_uri /health
+        health_interval 30s
+        health_timeout 10s
+        
+        header_up Host {host}
+        header_up X-Real-IP {remote}
+        header_up X-Forwarded-For {remote}
+        header_up X-Forwarded-Proto {scheme}
+    }
+}
+
+# Homeserver
+localhost:6287, homeserver.localhost {
+    log {
+        output file /var/log/caddy/homeserver.log
+        format json
+    }
+    
+    # CORS headers
+    header {
+        Access-Control-Allow-Origin "*"
+        Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+        Access-Control-Allow-Headers "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization"
+        Access-Control-Max-Age "86400"
+    }
+    
+    @options method OPTIONS
+    handle @options {
+        respond 204
+    }
+    
+    # Reverse proxy to homeserver
+    reverse_proxy homeserver:6287 {
+        health_uri /health
+        health_interval 30s
+        health_timeout 10s
+        
+        header_up Host {host}
+        header_up X-Real-IP {remote}
+        header_up X-Forwarded-For {remote}
+        header_up X-Forwarded-Proto {scheme}
+    }
+}
+
+# HTTP Relay
+localhost:15412, httprelay.localhost {
+    log {
+        output file /var/log/caddy/httprelay.log
+        format json
+    }
+    
+    # CORS headers for relay
+    header {
+        Access-Control-Allow-Origin "*"
+        Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS, PATCH"
+        Access-Control-Allow-Headers "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, User-Agent"
+        Access-Control-Allow-Credentials "true"
+        Access-Control-Max-Age "86400"
+    }
+    
+    @options method OPTIONS
+    handle @options {
+        respond 204
+    }
+    
+    # Reverse proxy to httprelay
+    reverse_proxy httprelay:15412 {
+        header_up Host {host}
+        header_up X-Real-IP {remote}
+        header_up X-Forwarded-For {remote}
+        header_up X-Forwarded-Proto {scheme}
+    }
+}
+
+# Caddy admin interface (development only)
+localhost:2019 {
+    log {
+        output file /var/log/caddy/admin.log
+        format json
+    }
+    
+    # Restrict access to admin interface
+    @local {
+        remote_ip 127.0.0.1 ::1 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16
+    }
+    
+    handle @local {
+        reverse_proxy localhost:2019
+    }
+    
+    handle {
+        respond "Access denied" 403
+    }
+}
