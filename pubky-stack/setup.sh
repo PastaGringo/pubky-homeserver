@@ -447,6 +447,95 @@ check_prerequisites() {
     return 0
 }
 
+# Function to clone required repositories
+clone_repositories() {
+    print_header "CLONING REQUIRED REPOSITORIES"
+    
+    cd "$PROJECT_ROOT"
+    
+    # Repository URLs
+    local PUBKY_NEXUS_REPO="https://github.com/pubky/pubky-nexus.git"
+    local PUBKY_APP_REPO="https://github.com/pubky/pubky-app.git"
+    local PUBKY_CORE_REPO="https://github.com/pubky/pubky-core.git"
+    
+    # Clone pubky-nexus if not exists
+    if [[ ! -d "pubky-nexus" ]]; then
+        print_step "Cloning pubky-nexus repository..."
+        if git clone "$PUBKY_NEXUS_REPO" pubky-nexus; then
+            print_success "pubky-nexus cloned successfully"
+        else
+            print_error "Failed to clone pubky-nexus repository"
+            return 1
+        fi
+    else
+        print_success "pubky-nexus repository already exists"
+    fi
+    
+    # Clone pubky-app if not exists
+    if [[ ! -d "pubky-app" ]]; then
+        print_step "Cloning pubky-app repository..."
+        if git clone "$PUBKY_APP_REPO" pubky-app; then
+            print_success "pubky-app cloned successfully"
+        else
+            print_error "Failed to clone pubky-app repository"
+            return 1
+        fi
+    else
+        print_success "pubky-app repository already exists"
+    fi
+    
+    # Clone pubky-core as homeserver if not exists
+    if [[ ! -d "homeserver" ]]; then
+        print_step "Cloning pubky-core repository as homeserver..."
+        if git clone "$PUBKY_CORE_REPO" homeserver; then
+            print_success "homeserver set up successfully from pubky-core"
+        else
+            print_error "Failed to clone pubky-core repository"
+            return 1
+        fi
+    else
+        print_success "homeserver directory already exists"
+    fi
+    
+    # Create necessary directories and config files
+    print_step "Setting up repository configurations..."
+    
+    # Create pubky-nexus config if not exists
+    if [[ ! -f "pubky-nexus/config.toml" ]]; then
+        print_step "Creating pubky-nexus config.toml..."
+        cat > "pubky-nexus/config.toml" << EOF
+# Pubky Nexus Configuration
+homeserver_id = "8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo"
+
+[database]
+url = "bolt://neo4j:7687"
+username = "neo4j"
+password = "password"
+
+[redis]
+url = "redis://redis:6379"
+
+[server]
+host = "0.0.0.0"
+port = 8080
+
+[log]
+level = "info"
+EOF
+        print_success "pubky-nexus config.toml created"
+    fi
+    
+    # Create storage directory for pubky-nexus
+    if [[ ! -d "pubky-nexus/storage/static" ]]; then
+        print_step "Creating pubky-nexus storage directory..."
+        mkdir -p "pubky-nexus/storage/static"
+        print_success "pubky-nexus storage directory created"
+    fi
+    
+    print_success "All repositories and configurations are ready"
+    return 0
+}
+
 # Function to check if Docker is running
 check_docker() {
     print_step "Checking Docker installation..."
@@ -497,14 +586,49 @@ configure_environment() {
     
     print_step "Configuring environment variables..."
     
-    # Homeserver configuration
-    ask_input "Homeserver ID" "${NEXT_PUBLIC_HOMESERVER:-$DEFAULT_HOMESERVER}" "NEXT_PUBLIC_HOMESERVER"
+    # DNS Configuration - Ask for root domain
+    echo
+    print_color $YELLOW "DNS Configuration:"
+    print_color $CYAN "Enter your root domain (e.g., domain.tld) to automatically generate subdomains:"
+    print_color $CYAN "  • nexus.domain.tld (for Nexus service)"
+    print_color $CYAN "  • homeserver.domain.tld (for Homeserver service)"
+    print_color $CYAN "  • relay.domain.tld (for HTTP Relay service)"
+    echo
     
-    # Nexus configuration
-    ask_input "Nexus URL" "${NEXT_PUBLIC_NEXUS:-$DEFAULT_NEXUS}" "NEXT_PUBLIC_NEXUS"
+    local root_domain=""
+    ask_input "Root domain (leave empty to use default URLs)" "" "root_domain"
     
-    # HTTP Relay configuration
-    ask_input "HTTP Relay URL" "${NEXT_PUBLIC_DEFAULT_HTTP_RELAY:-$DEFAULT_HTTP_RELAY}" "NEXT_PUBLIC_DEFAULT_HTTP_RELAY"
+    # Configure URLs based on root domain or use defaults
+    if [[ -n "$root_domain" ]]; then
+        print_success "Using root domain: $root_domain"
+        
+        # Generate subdomains
+        local nexus_url="https://nexus.${root_domain}"
+        local homeserver_id="homeserver.${root_domain}"
+        local relay_url="https://relay.${root_domain}/link"
+        
+        # Set the generated URLs
+        NEXT_PUBLIC_HOMESERVER="$homeserver_id"
+        NEXT_PUBLIC_NEXUS="$nexus_url"
+        NEXT_PUBLIC_DEFAULT_HTTP_RELAY="$relay_url"
+        
+        print_color $GREEN "Generated URLs:"
+        print_color $CYAN "  • Homeserver ID: $homeserver_id"
+        print_color $CYAN "  • Nexus URL: $nexus_url"
+        print_color $CYAN "  • HTTP Relay URL: $relay_url"
+        echo
+    else
+        print_warning "Using default URLs (no custom domain)"
+        
+        # Homeserver configuration
+        ask_input "Homeserver ID" "${NEXT_PUBLIC_HOMESERVER:-$DEFAULT_HOMESERVER}" "NEXT_PUBLIC_HOMESERVER"
+        
+        # Nexus configuration
+        ask_input "Nexus URL" "${NEXT_PUBLIC_NEXUS:-$DEFAULT_NEXUS}" "NEXT_PUBLIC_NEXUS"
+        
+        # HTTP Relay configuration
+        ask_input "HTTP Relay URL" "${NEXT_PUBLIC_DEFAULT_HTTP_RELAY:-$DEFAULT_HTTP_RELAY}" "NEXT_PUBLIC_DEFAULT_HTTP_RELAY"
+    fi
     
     # PKARR Relays configuration
     ask_input "PKARR Relays (JSON array)" "${NEXT_PUBLIC_PKARR_RELAYS:-$DEFAULT_PKARR_RELAYS}" "NEXT_PUBLIC_PKARR_RELAYS"
@@ -523,6 +647,14 @@ configure_environment() {
         NEXT_ENABLE_PLAUSIBLE="false"
     fi
     
+    # Nexus build configuration
+    if ask_yes_no "Do you want to build Nexus service?" "y"; then
+        BUILD_NEXUS="true"
+    else
+        BUILD_NEXUS="false"
+        print_warning "Nexus build will be skipped. Nexus service will not be available."
+    fi
+    
     # Git branch and ref for pubky-app
     ask_input "Pubky App Git Branch" "${PUBKY_APP_BRANCH:-dev}" "PUBKY_APP_BRANCH"
     ask_input "Pubky App Git Ref (optional)" "${PUBKY_APP_REF:-}" "PUBKY_APP_REF"
@@ -532,6 +664,9 @@ configure_environment() {
     
     # Save configuration
     save_config
+    
+    # Generate docker-compose override
+    generate_docker_compose_override
 }
 
 # Function to save configuration to .env file
@@ -559,6 +694,7 @@ NEXT_PUBLIC_TESTNET=$NEXT_PUBLIC_TESTNET
 NEXT_ENABLE_PLAUSIBLE=$NEXT_ENABLE_PLAUSIBLE
 
 # Build Configuration
+BUILD_NEXUS=$BUILD_NEXUS
 PUBKY_APP_BRANCH=$PUBKY_APP_BRANCH
 PUBKY_APP_REF=$PUBKY_APP_REF
 PUBKY_APP_DATE=$PUBKY_APP_DATE
@@ -571,7 +707,7 @@ EOF
 generate_docker_compose_override() {
     print_step "Generating docker-compose override..."
     
-    local override_file="$PROJECT_ROOT/docker-compose.override.yml"
+    local override_file="$SCRIPT_DIR/docker-compose.override.yml"
     
     cat > "$override_file" << EOF
 # Docker Compose Override - Generated by Pubky Stack Setup
@@ -890,7 +1026,7 @@ EOF
 build_services() {
     print_header "BUILDING SERVICES"
     
-    if ask_yes_no "Build all services?" "y"; then
+    if ask_yes_no "Build services?" "y"; then
         print_step "Building Docker images..."
         
         cd "$PROJECT_ROOT"
@@ -898,14 +1034,28 @@ build_services() {
         # Export environment variables
         export $(cat "$ENV_FILE" | grep -v '^#' | xargs)
         
-        # Build services
-        if command -v docker-compose &> /dev/null; then
-            docker-compose build --no-cache
+        # Determine which services to build based on configuration
+        local services_to_build=""
+        
+        # Always build core services
+        services_to_build="pubky-app homeserver caddy httprelay"
+        
+        # Add nexus only if BUILD_NEXUS is true
+        if [[ "${BUILD_NEXUS:-true}" == "true" ]]; then
+            services_to_build="nexusd $services_to_build"
+            print_step "Including Nexus service in build..."
         else
-            docker compose build --no-cache
+            print_warning "Skipping Nexus service build (BUILD_NEXUS=false)"
         fi
         
-        print_success "All services built successfully"
+        # Build services
+        if command -v docker-compose &> /dev/null; then
+            docker-compose build --no-cache $services_to_build
+        else
+            docker compose build --no-cache $services_to_build
+        fi
+        
+        print_success "Selected services built successfully"
     fi
 }
 
@@ -920,14 +1070,28 @@ start_services() {
     
     print_step "Starting Pubky Stack..."
     
-    # Start services
-    if command -v docker-compose &> /dev/null; then
-        docker-compose up -d
+    # Determine which services to start based on configuration
+    local services_to_start=""
+    
+    # Always start core services
+    services_to_start="pubky-app homeserver caddy httprelay"
+    
+    # Add nexus only if BUILD_NEXUS is true
+    if [[ "${BUILD_NEXUS:-true}" == "true" ]]; then
+        services_to_start="nexusd $services_to_start"
+        print_step "Including Nexus service in startup..."
     else
-        docker compose up -d
+        print_warning "Skipping Nexus service startup (BUILD_NEXUS=false)"
     fi
     
-    print_success "Pubky Stack started successfully!"
+    # Start services
+    if command -v docker-compose &> /dev/null; then
+        docker-compose up -d $services_to_start
+    else
+        docker compose up -d $services_to_start
+    fi
+    
+    print_success "Selected services started successfully!"
     
     # Show status
     show_status
@@ -965,7 +1129,9 @@ show_status() {
     echo
     print_color $GREEN "Access URLs:"
     print_color $CYAN "  • Pubky App: http://localhost (via Caddy)"
-    print_color $CYAN "  • Nexus: http://localhost:8080"
+    if [[ "${BUILD_NEXUS:-true}" == "true" ]]; then
+        print_color $CYAN "  • Nexus: http://localhost:8080"
+    fi
     print_color $CYAN "  • Homeserver: http://localhost:6287"
     echo
 }
@@ -978,24 +1144,43 @@ show_logs() {
     
     echo "Available services:"
     echo "  1. pubky-app"
-    echo "  2. nexusd"
-    echo "  3. homeserver"
-    echo "  4. caddy"
-    echo "  5. httprelay"
-    echo "  6. all"
-    echo
-    
-    read -p "$(echo -e "${YELLOW}Select service (1-6): ${NC}")" choice
-    
-    case $choice in
-        1) service="pubky-app";;
-        2) service="nexusd";;
-        3) service="homeserver";;
-        4) service="caddy";;
-        5) service="httprelay";;
-        6) service="";;
-        *) print_error "Invalid choice"; return 1;;
-    esac
+    if [[ "${BUILD_NEXUS:-true}" == "true" ]]; then
+        echo "  2. nexusd"
+        echo "  3. homeserver"
+        echo "  4. caddy"
+        echo "  5. httprelay"
+        echo "  6. all"
+        echo
+        
+        read -p "$(echo -e "${YELLOW}Select service (1-6): ${NC}")" choice
+        
+        case $choice in
+            1) service="pubky-app";;
+            2) service="nexusd";;
+            3) service="homeserver";;
+            4) service="caddy";;
+            5) service="httprelay";;
+            6) service="";;
+            *) print_error "Invalid choice"; return 1;;
+        esac
+    else
+        echo "  2. homeserver"
+        echo "  3. caddy"
+        echo "  4. httprelay"
+        echo "  5. all"
+        echo
+        
+        read -p "$(echo -e "${YELLOW}Select service (1-5): ${NC}")" choice
+        
+        case $choice in
+            1) service="pubky-app";;
+            2) service="homeserver";;
+            3) service="caddy";;
+            4) service="httprelay";;
+            5) service="";;
+            *) print_error "Invalid choice"; return 1;;
+        esac
+    fi
     
     if command -v docker-compose &> /dev/null; then
         docker-compose logs -f $service
@@ -1064,6 +1249,12 @@ main() {
     # Check and install prerequisites
     if ! check_prerequisites; then
         print_error "Prerequisites check failed. Cannot continue."
+        exit 1
+    fi
+    
+    # Clone required repositories
+    if ! clone_repositories; then
+        print_error "Repository cloning failed. Cannot continue."
         exit 1
     fi
     
