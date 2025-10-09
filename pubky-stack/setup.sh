@@ -20,7 +20,7 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
 # Configuration files
 ENV_FILE="$SCRIPT_DIR/.env"
-DOCKER_COMPOSE_FILE="$PROJECT_ROOT/docker-compose.yml"
+DOCKER_COMPOSE_FILE="$SCRIPT_DIR/docker-compose.yml"
 
 # Default values
 DEFAULT_HOMESERVER="e9qbrpxu7bdfiq863bny1xdfs4patdem8fp1grq5qe5tafep7a7o"
@@ -451,7 +451,7 @@ check_prerequisites() {
 clone_repositories() {
     print_header "CLONING REQUIRED REPOSITORIES"
     
-    cd "$PROJECT_ROOT"
+    cd "$SCRIPT_DIR"
     
     # Repository URLs
     local PUBKY_NEXUS_REPO="https://github.com/pubky/pubky-nexus.git"
@@ -1001,8 +1001,8 @@ setup_caddy() {
     
     if [[ ! -f "$caddy_config" ]]; then
         # Copy default Caddyfile if it doesn't exist
-        if [[ -f "$PROJECT_ROOT/caddy/Caddyfile" ]]; then
-            cp "$PROJECT_ROOT/caddy/Caddyfile" "$caddy_config"
+        if [[ -f "$SCRIPT_DIR/caddy/Caddyfile" ]]; then
+            cp "$SCRIPT_DIR/caddy/Caddyfile" "$caddy_config"
             print_success "Caddy configuration copied"
         else
             print_warning "No default Caddyfile found, creating basic configuration"
@@ -1029,7 +1029,7 @@ build_services() {
     if ask_yes_no "Build services?" "y"; then
         print_step "Building Docker images..."
         
-        cd "$PROJECT_ROOT"
+        cd "$SCRIPT_DIR"
         
         # Export environment variables
         export $(cat "$ENV_FILE" | grep -v '^#' | xargs)
@@ -1063,7 +1063,7 @@ build_services() {
 start_services() {
     print_header "STARTING SERVICES"
     
-    cd "$PROJECT_ROOT"
+    cd "$SCRIPT_DIR"
     
     # Export environment variables
     export $(cat "$ENV_FILE" | grep -v '^#' | xargs)
@@ -1101,7 +1101,7 @@ start_services() {
 stop_services() {
     print_header "STOPPING SERVICES"
     
-    cd "$PROJECT_ROOT"
+    cd "$SCRIPT_DIR"
     
     print_step "Stopping Pubky Stack..."
     
@@ -1118,7 +1118,7 @@ stop_services() {
 show_status() {
     print_header "SERVICE STATUS"
     
-    cd "$PROJECT_ROOT"
+    cd "$SCRIPT_DIR"
     
     if command -v docker-compose &> /dev/null; then
         docker-compose ps
@@ -1140,7 +1140,7 @@ show_status() {
 show_logs() {
     print_header "SERVICE LOGS"
     
-    cd "$PROJECT_ROOT"
+    cd "$SCRIPT_DIR"
     
     echo "Available services:"
     echo "  1. pubky-app"
@@ -1203,7 +1203,7 @@ cleanup() {
     print_header "CLEANUP"
     
     if ask_yes_no "Remove all containers and volumes?" "n"; then
-        cd "$PROJECT_ROOT"
+        cd "$SCRIPT_DIR"
         
         print_step "Cleaning up..."
         
